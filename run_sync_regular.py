@@ -11,7 +11,7 @@ they form the §6.2 reproduction-and-extension block:
                                   distributed synchronous algorithm
                                   on the same four static graphs
 
-Koshal et al.\ (2016) report distributed synchronous results only on
+Koshal et al. (2016) report distributed synchronous results only on
 *dynamic* B-strongly-connected networks (their Tables 1, 2); the
 distributed synchronous algorithm on static regular graphs is not
 covered by their tables. This script fills that gap so that the

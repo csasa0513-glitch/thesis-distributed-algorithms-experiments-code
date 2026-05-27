@@ -25,10 +25,15 @@ CAP = np.full((N, L), CAP_CONST)
 
 
 def resample(N_new: int) -> None:
-    """Redraw ALL Cournot coefficients (D, A, B) for a new N from seed (SEED+N_new)."""
+    """Redraw ALL Cournot coefficients (D, A, B) from the MASTER seed
+    (not from SEED + N_new). Under this scheme the N=20 game is a
+    strict subset of the N=50 game (first 20 players share identical
+    a, b coefficients), so N=20 vs N=50 can be compared as a true
+    scaling experiment -- which matches the intent of Koshal et al.'s
+    Tables 3-8 where larger N is reported as harder."""
     global N, A_COEF, B_COEF, CAP, D_INTERCEPT
     N = N_new
-    rng = np.random.default_rng(SEED + N_new)
+    rng = np.random.default_rng(SEED)
     D_INTERCEPT = rng.uniform(90.0, 100.0, size=L)
     A_COEF      = rng.uniform(2.0,  12.0, size=(N, L))
     B_COEF      = rng.uniform(2.0,   3.0, size=(N, L))

@@ -1,0 +1,37 @@
+# --- Experiment outputs (large, regenerable) ---
+results/*.csv
+results/*.png
+results/*.npz
+
+# --- Python cache and bytecode ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- IDE / editor metadata ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS-generated files ---
+.DS_Store
+Thumbs.db
+
+# --- Temporary / diagnostic scripts ---
+diagnose_*.py
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*.ipynb
+
+# --- Optional: keep results folder structure but ignore contents ---
+!results/.gitkeep

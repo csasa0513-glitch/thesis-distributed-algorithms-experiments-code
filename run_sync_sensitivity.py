@@ -1,15 +1,18 @@
 """
 Q3 (sync sensitivity): effect of the rewiring probability p of the
-Watts-Strogatz family on the SYNCHRONOUS algorithm.
+Watts-Strogatz family on the SYNCHRONOUS algorithm. Used by Sec. 6.4
+of the thesis.
 
-This is the sync analogue of run_async_sensitivity.py. It supports
-Section 6.5 of the thesis ("Algorithm 1 (Synchronous) Sensitivity").
+PAIRED with run_async_sensitivity.py: both scripts use master seed
+C.SEED + 44 with the SAME (p outer, rep inner) loop and the same per-
+rep seed-derivation order, so that within each (p, r) cell the synchronous
+and asynchronous algorithms run on the SAME WS realisation and the SAME
+initial point x^0. This isolates the algorithmic difference from
+graph-sample and initial-condition randomness.
 
 For Watts-Strogatz we sweep the rewiring probability
     p in {0.0, 0.001, 0.01, 0.1, 0.5, 1.0}
-on a ring-lattice of base degree K = 6 (uppercase K is the WS ring
-degree from Watts & Strogatz 1998; lowercase k is reserved for the
-iteration index).
+on a ring-lattice of base degree K = 6.
 
 The sweep uses N = 50 and `config.R` repetitions, with a fresh graph
 realisation per sample path. The sync stepsize is alpha_k = 1/k.
@@ -17,7 +20,7 @@ realisation per sample path. The sync stepsize is alpha_k = 1/k.
 Outputs written to `results/`:
 
     sync_sensitivity.csv       one row per (family, parameter, rep);
-                               fills the sync sensitivity table of Sec. 6.5
+                               fills the sync sensitivity table of Sec. 6.4
     sync_sensitivity.png       single-panel convergence figure (WS)
 
 Usage:
@@ -46,13 +49,12 @@ K_SUMMARY: int = 10_000      # horizon reported in the LaTeX sensitivity table
 WS_K: int = C.WS_K
 
 
-def _load_or_solve_NE() -> np.ndarray:
-    cache = C.RESULTS / "NE.npz"
-    if cache.exists():
-        return np.load(cache)["x_star"]
-    x_star = solve_NE()
-    np.savez(cache, x_star=x_star)
-    return x_star
+def _fresh_NE(N_val: int = 50) -> np.ndarray:
+    """Resample Cournot coefficients and recompute NE -- always fresh,
+    no caching, so any change to game parameters or projection takes
+    effect immediately."""
+    C.resample(N_val)
+    return solve_NE()
 
 
 def _random_x0(N: int, L: int, rng: np.random.Generator) -> np.ndarray:
@@ -86,12 +88,14 @@ def _run_sweep(family: str, param_values, graph_builder,
             iters = out["iters"]
             idx = int(np.searchsorted(iters, K_SUMMARY, side="right") - 1)
             idx = max(0, min(idx, len(out["rel_err"]) - 1))
+            struct = struct_summary(G, W)
             rows.append({
-                "family":     family,
-                "param":      float(pv),
-                "rep":        r,
+                "family":          family,
+                "param":           float(pv),
+                "rep":             r,
                 "mean_error_at_K": float(out["rel_err"][idx]),
-                **struct_summary(G, W),
+                "abs_lambda2":     1.0 - struct["spectral_gap"],
+                **struct,
             })
             if (r + 1) % 10 == 0 or (r + 1) == N_REPS:
                 print(f"    [{family}={pv}] run {r + 1}/{N_REPS} done", flush=True)
@@ -106,13 +110,18 @@ def _run_sweep(family: str, param_values, graph_builder,
 
 def main() -> None:
     # Use N = 50 to match the async sensitivity sweep (config default).
-    C.resample(50)
-    x_star = _load_or_solve_NE()
+    # Fresh NE: no caching, so any change to game parameters takes effect.
+    x_star = _fresh_NE(N_val=50)
+    print(f"[start] NE solved, ||x*|| = {np.linalg.norm(x_star):.4f}",
+          flush=True)
 
     def _ws_builder(N_val, p, seed):
         return watts_strogatz(N_val, WS_K, p, seed=seed)
 
-    rng = np.random.default_rng(C.SEED + 43)   # different from async sweep
+    # Paired with run_async_sensitivity.py (same master seed, same loop
+    # order, same per-rep RNG calls) so sync and async use identical
+    # WS graphs and identical x^0 for each (p, r) cell.
+    rng = np.random.default_rng(C.SEED + 44)
 
     rows_all = []
 
@@ -135,18 +144,25 @@ def main() -> None:
     print("\nSummary (mean over reps of mean_error_at_K):")
     print(df.groupby(["family", "param"])["mean_error_at_K"].mean())
 
-    # Single-panel figure (convergence curves)
+    # Single-panel figure (convergence curves).
+    # Following Watts-Strogatz (1998) Fig. 2 style, we drop p=0 from the
+    # plot (no log-scale rendering for p=0); p=0 numbers are still in the
+    # CSV / Table.
     fig, ax = plt.subplots(1, 1, figsize=(7.0, 4.0))
     for label, (x, m, lo, hi) in curves_ws.items():
-        ax.plot(x, m, label=label, linewidth=1.3)
+        # label format is "WS 0.0", "WS 0.001", etc.
+        pv = float(label.split()[-1])
+        if pv == 0.0:
+            continue
+        ax.plot(x, m, label=f"$p={pv:g}$", linewidth=1.3)
         ax.fill_between(x, lo, hi, alpha=0.2)
     ax.set_yscale("log")
-    ax.set_xlabel("iteration k")
-    ax.set_ylabel("relative error e(k)")
-    ax.set_title("Watts-Strogatz  (varying p, K=6)")
+    ax.set_xlabel("iteration $k$")
+    ax.set_ylabel("relative error $e(k)$")
+    ax.set_title("Watts--Strogatz $(N=50,\\,K=6)$, varying $p$")
     ax.grid(True, which="both", alpha=0.3)
-    ax.legend(fontsize=8)
-    fig.suptitle("Synchronous algorithm: sensitivity to the rewiring probability p")
+    ax.legend(fontsize=8, loc="best")
+    fig.suptitle("Synchronous algorithm: sensitivity to the rewiring probability $p$")
     fig.tight_layout()
     fig.savefig(C.RESULTS / "sync_sensitivity.png", dpi=200)
     plt.close(fig)

@@ -52,13 +52,12 @@ K_SUMMARY: int = 10_000           # error reported in Table 7
 WS_K: int = C.WS_K                # 6
 
 
-def _load_or_solve_NE() -> np.ndarray:
-    cache = C.RESULTS / "NE.npz"
-    if cache.exists():
-        return np.load(cache)["x_star"]
-    x_star = solve_NE()
-    np.savez(cache, x_star=x_star)
-    return x_star
+def _fresh_NE(N_val: int = 50) -> np.ndarray:
+    """Resample Cournot coefficients and recompute NE -- always fresh,
+    no caching, so any change to game parameters or projection takes
+    effect immediately."""
+    C.resample(N_val)
+    return solve_NE()
 
 
 def _random_x0(N: int, L: int, rng: np.random.Generator) -> np.ndarray:
@@ -72,9 +71,10 @@ def _random_x0(N: int, L: int, rng: np.random.Generator) -> np.ndarray:
 def main() -> None:
     print(f"[start] sync run at p={P}, R={N_REPS}, max_iter={MAX_ITER:,}",
           flush=True)
-    print("[start] loading Nash equilibrium ...", flush=True)
-    x_star = _load_or_solve_NE()
-    print(f"[start] NE loaded, x_star shape = {x_star.shape}", flush=True)
+    print("[start] solving Nash equilibrium (fresh, N=50) ...", flush=True)
+    x_star = _fresh_NE(N_val=50)
+    print(f"[start] NE solved, ||x*|| = {np.linalg.norm(x_star):.4f}",
+          flush=True)
     master_rng = np.random.default_rng(C.SEED + 43)  # match sync_sensitivity
 
     rows = []

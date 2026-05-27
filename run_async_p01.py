@@ -48,22 +48,22 @@ K_SUMMARY: int = 100_000          # error reported in Table 7
 WS_K: int = C.WS_K                # 6
 
 
-def _load_or_solve_NE() -> np.ndarray:
-    cache = C.RESULTS / "NE.npz"
-    if cache.exists():
-        return np.load(cache)["x_star"]
-    x_star = solve_NE()
-    np.savez(cache, x_star=x_star)
-    return x_star
+def _fresh_NE(N_val: int = 50) -> np.ndarray:
+    """Resample Cournot coefficients and recompute NE -- always fresh,
+    no caching, so any change to game parameters or projection takes
+    effect immediately."""
+    C.resample(N_val)
+    return solve_NE()
 
 
 def main() -> None:
     import time, sys
     print(f"[start] async run at p={P}, R={N_REPS}, max_events={MAX_EVENTS:,}",
           flush=True)
-    print("[start] loading Nash equilibrium ...", flush=True)
-    x_star = _load_or_solve_NE()
-    print(f"[start] NE loaded, x_star shape = {x_star.shape}", flush=True)
+    print("[start] solving Nash equilibrium (fresh, N=50) ...", flush=True)
+    x_star = _fresh_NE(N_val=50)
+    print(f"[start] NE solved, ||x*|| = {np.linalg.norm(x_star):.4f}",
+          flush=True)
     # Paired with run_sync_p01.py (same master seed C.SEED + 43)
     # so both algorithms run on the *same* 50 graph instances. This
     # turns §6.3.2 into a clean sync-vs-async comparison on a common

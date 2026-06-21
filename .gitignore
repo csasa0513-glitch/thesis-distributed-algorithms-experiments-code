@@ -39,6 +39,9 @@ plot_async_p01.py
 run_spectral.py
 check/
 
+# --- Thesis PDF (not part of the code repo) ---
+BA_*.pdf
+
 # --- Jupyter ---
 .ipynb_checkpoints/
 *.ipynb

@@ -35,6 +35,10 @@ run_sync_sensitivity_v2.py
 plot_sync_p01.py
 plot_async_p01.py
 
+# --- Auxiliary / diagnostic, not needed to reproduce the thesis ---
+run_spectral.py
+check/
+
 # --- Jupyter ---
 .ipynb_checkpoints/
 *.ipynb

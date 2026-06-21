@@ -1,27 +1,13 @@
 """
-Synchronous algorithm on the representative small-world graph
-WS(N=50, K=6, p=0.1) used by Section 6.3 of the thesis.
+Synchronous algorithm on WS(50, 6, 0.1) for Figure 3a.
 
-This script runs ONLY p = 0.1 (no sweep) -- the full sweep is in
-`run_sync_sensitivity.py`. We need a single representative graph
-setting for the §6.3.2 "Sync vs async convergence on WS(p=0.1)"
-analysis, with the full trajectory stored per rep so we can plot
-the mean curve plus 90% CI band.
+Runs only p_rew = 0.1 and records the mean-error trajectory and the
+error at k = 10^4 for R = C.R independent realisations.
 
-For R = 50 independent realisations of WS(50, 6, 0.1) we record:
-    - the full mean-error trajectory (for the §6.3.2 figure)
-    - the relative error at horizon \\tilde k = 10^4 (Table 7)
-    - the structural indicators of the graph
-    - the synchronous spectral indicator |lambda_2(W)|
-          (Boyd-Gossip 2006; Koshal 2016)
-
-Outputs (in `results/`):
-    sync_p01.csv             one row per rep with summary stats
-    sync_p01_trajectories.npz  curves array for plotting (iters, runs)
-    ws_sync_p01.png          mean-error figure with 90% CI band
-
-Usage:
-    python run_sync_p01.py
+Outputs:
+    sync_p01.csv
+    sync_p01_trajectories.npz
+    ws_sync_p01.png
 """
 from __future__ import annotations
 
@@ -29,67 +15,85 @@ import time
 
 import numpy as np
 import pandas as pd
+import networkx as nx
 import matplotlib.pyplot as plt
 
 import config as C
 from games.nash_cournot import solve_NE, project_Xi
-from graphs.topologies import watts_strogatz
+from graphs.generators import watts_strogatz
 from algorithms.sync_koshal import run as run_sync
 from analysis.metrics import (
     summary as struct_summary,
-    spectral_gap,
+    sync,
 )
 from analysis.plots import mean_ci
 
 
 # --------------------------------------------------------------------------
-# Fixed knobs (§6.3 design: one representative p = 0.1)
+# Fixed knobs
 # --------------------------------------------------------------------------
-P: float = 0.1
-N_REPS: int = C.R                 # 50
-MAX_ITER: int = 10_000            # \tilde k = 10^4 (Koshal sync horizon)
-K_SUMMARY: int = 10_000           # error reported in Table 7
-WS_K: int = C.WS_K                # 6
+P_REW: float = 0.1
+N_REPS: int = C.R                 
+MAX_ITER: int = 10_000            
+K_SUMMARY: int = 10_000           
+WS_K: int = C.WS_K                
 
 
 def _fresh_NE(N_val: int = 50) -> np.ndarray:
-    """Resample Cournot coefficients and recompute NE -- always fresh,
-    no caching, so any change to game parameters or projection takes
-    effect immediately."""
     C.resample(N_val)
     return solve_NE()
 
 
 def _random_x0(N: int, L: int, rng: np.random.Generator) -> np.ndarray:
-    """Random initial decision, projected onto each player's X_i."""
-    raw = rng.uniform(0.0, C.INIT_SCALE, size=(N, 2 * L))
+    xi = rng.uniform(0.0, C.INIT_SCALE, size=(N, 2 * L))   # xi_i ~ U([0, INIT_SCALE])^{2L}
     for i in range(N):
-        raw[i] = project_Xi(i, raw[i])
-    return raw
+        xi[i] = project_Xi(i, xi[i])
+    return xi
+
+
+def _rep_plan(master_rng: np.random.Generator) -> tuple[int, int, int, int]:
+    rep_seed = int(master_rng.integers(1 << 31))
+    rng_plan = np.random.default_rng(rep_seed)
+    graph_seed = int(rng_plan.integers(1 << 31))
+    x0_seed = int(rng_plan.integers(1 << 31))
+    gossip_seed = int(rng_plan.integers(1 << 31))
+    return rep_seed, graph_seed, x0_seed, gossip_seed
 
 
 def main() -> None:
-    print(f"[start] sync run at p={P}, R={N_REPS}, max_iter={MAX_ITER:,}",
+    print(f"[start] sync run at p_rew={P_REW}, R={N_REPS}, max_iter={MAX_ITER:,}",
           flush=True)
     print("[start] solving Nash equilibrium (fresh, N=50) ...", flush=True)
     x_star = _fresh_NE(N_val=50)
     print(f"[start] NE solved, ||x*|| = {np.linalg.norm(x_star):.4f}",
           flush=True)
-    master_rng = np.random.default_rng(C.SEED + 43)  # match sync_sensitivity
+    master_rng = np.random.default_rng(C.SEED + 43)
 
     rows = []
     trajectories: list[np.ndarray] = []
     iter_axes: list[np.ndarray] = []
+    x0_list: list[np.ndarray] = []   # stored in npz for paired-comparison audit
 
     t_start = time.time()
     for r in range(N_REPS):
         t_rep = time.time()
-        seed = int(master_rng.integers(1 << 31))
-        rng = np.random.default_rng(seed)
-        graph_seed = int(rng.integers(1 << 31))
+        rep_seed, graph_seed, x0_seed, gossip_seed = _rep_plan(master_rng)
 
-        G, W = watts_strogatz(C.N, WS_K, P, seed=graph_seed)
-        x0 = _random_x0(C.N, C.L, rng)
+        G, W = watts_strogatz(C.N, WS_K, P_REW, seed=graph_seed)
+        assert nx.is_connected(G), (
+            f"watts_strogatz returned a disconnected graph at "
+            f"rep = {r}, graph_seed = {graph_seed}. "
+            f"Check graphs/generators.py watts_strogatz."
+        )
+        x0_rng = np.random.default_rng(x0_seed)
+        x0 = _random_x0(C.N, C.L, x0_rng)
+        assert x0.shape == (C.N, 2 * C.L), (
+            f"x0 shape mismatch at rep = {r}: got {x0.shape}, "
+            f"expected ({C.N}, {2 * C.L})."
+        )
+        assert np.isfinite(x0).all(), (
+            f"x0 contains non-finite values at rep = {r}."
+        )
         print(f"  rep {r + 1:2d}/{N_REPS} starting ...", flush=True)
 
         out = run_sync(
@@ -106,19 +110,24 @@ def main() -> None:
         idx = int(np.searchsorted(iters, K_SUMMARY, side="right") - 1)
         idx = max(0, min(idx, len(rel_err) - 1))
 
-        # Per-graph spectral indicator |lambda_2(W)|
-        lam2 = 1.0 - spectral_gap(W)
+        # Per-graph spectral indicator |lambda_2(W)| = rho_sync = sync(W)
+        lam2 = sync(W)
 
         rows.append({
             "rep":                r,
-            "p":                  P,
+            "p_rew":                  P_REW,
             "mean_error_at_K":    float(rel_err[idx]),
             "abs_lambda2":        lam2,
+            "rep_seed":           rep_seed,
+            "graph_seed":         graph_seed,
+            "x0_seed":            x0_seed,
+            "gossip_seed":        gossip_seed,
             **struct_summary(G, W),
         })
 
         trajectories.append(rel_err)
         iter_axes.append(iters)
+        x0_list.append(x0.copy())
 
         dt_rep = time.time() - t_rep
         elapsed_total = time.time() - t_start
@@ -132,30 +141,23 @@ def main() -> None:
     df.to_csv(C.RESULTS / "sync_p01.csv", index=False)
     print(f"\nSaved results/sync_p01.csv  ({N_REPS} rows)")
 
-    # Save trajectories for the §6.3.2 figure.
     np.savez(
         C.RESULTS / "sync_p01_trajectories.npz",
         iters_per_rep=np.stack(iter_axes),
         rel_err_per_rep=np.stack(trajectories),
+        x0_per_rep=np.stack(x0_list),
     )
     print(f"Saved results/sync_p01_trajectories.npz")
 
-    # --------------------------------------------------------------
-    # Figure: mean +/- 90% CI band over the R sample paths
-    # Cropped to k >= K_START to drop the early-stage transient of
-    # the 1/k diminishing stepsize (first step overshoots).
-    # --------------------------------------------------------------
-    K_START = 100
     mean, lo, hi = mean_ci(trajectories, confidence=0.90)
     iters_axis = iter_axes[0]
-    mask = iters_axis >= K_START
     fig, ax = plt.subplots(figsize=(7.0, 4.0))
-    ax.plot(iters_axis[mask], mean[mask], color="C0", linewidth=1.4,
+    ax.plot(iters_axis, mean, color="C0", linewidth=1.4,
             label="mean over $R = 50$ graphs")
-    ax.fill_between(iters_axis[mask], lo[mask], hi[mask],
+    ax.fill_between(iters_axis, lo, hi,
                     color="C0", alpha=0.25, label="90% CI")
     ax.set_yscale("log")
-    ax.set_xlabel(f"iteration $k$, $k \\geq {K_START}$")
+    ax.set_xlabel("iteration $k$")
     ax.set_ylabel("relative error $e(k)$")
     ax.set_title("Synchronous algorithm on $WS(50,\\,6,\\,0.1)$")
     ax.grid(True, which="both", alpha=0.3)
@@ -164,17 +166,6 @@ def main() -> None:
     fig.savefig(C.RESULTS / "ws_sync_p01.png", dpi=200)
     plt.close(fig)
     print(f"Saved results/ws_sync_p01.png")
-
-    # Quick sanity summary
-    n = len(df)
-    m = df["mean_error_at_K"].mean()
-    sd = df["mean_error_at_K"].std(ddof=1)
-    sem = sd / np.sqrt(n)
-    ci_width = 2 * 1.645 * sem  # 90% CI width
-    print("\n=== Sync at p=0.1 (R=50, max_iter=1e4) ===")
-    print(f"  mean error at k=1e4    : {m:.4f}")
-    print(f"  90% CI width           : {ci_width:.4e}")
-    print(f"  |lambda_2|(W) (mean R) : {df['abs_lambda2'].mean():.4f}")
 
 
 if __name__ == "__main__":

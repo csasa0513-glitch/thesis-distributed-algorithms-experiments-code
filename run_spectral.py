@@ -1,5 +1,5 @@
 """
-Compute |lambda_2(W)| for each topology in the five-topology setup.
+Compute |lambda_2(W)| for each graph in the five-graph setup.
 
 This script generates the data behind Table 1 in Chapter 6 of the thesis.
 |lambda_2(W)| is the second-largest eigenvalue (in magnitude) of the
@@ -9,14 +9,14 @@ weight matrix W defined by Koshal et al. (2016, p. 699):
 By Xiao and Boyd (2003, Theorem 1), |lambda_2| controls the asymptotic
 convergence rate of the consensus iteration on a static graph.
 
-For the deterministic topologies (cycle, star, grid, complete) we report
-one value per N. For the random topology (WS) we sample R independent
+For the deterministic graphs (cycle, wheel, grid, complete) we report
+one value per N. For the random graph (WS) we sample R independent
 graphs per N and report the mean and standard deviation over the R
 realisations.
 
 Output:
     results/spectral_gap.csv   long-format CSV
-        columns: N, topology, mean, std, n_samples
+        columns: N, graph, mean, std, n_samples
 
 Usage:
     python run_spectral.py
@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 import config as C
-from graphs.topologies import cycle, star, grid, complete, watts_strogatz
+from graphs.generators import cycle, wheel, grid, complete, watts_strogatz
 
 
 def lambda2(W: np.ndarray) -> float:
@@ -37,7 +37,7 @@ def lambda2(W: np.ndarray) -> float:
 
 
 def deterministic_value(N: int, gen) -> float:
-    """Compute lambda_2 for a deterministic topology."""
+    """Compute lambda_2 for a deterministic graph."""
     _, W = gen(N)
     return lambda2(W)
 
@@ -58,28 +58,28 @@ def main() -> None:
     rows = []
 
     print("=" * 60, flush=True)
-    print(f"Computing |lambda_2(W)| for the five-topology setup",
+    print(f"Computing |lambda_2(W)| for the five-graph setup",
           flush=True)
     print(f"  R (random graph samples) = {R}", flush=True)
     print("=" * 60, flush=True)
 
     for N in N_sizes:
-        # ---- Deterministic topologies ----
+        # ---- Deterministic graphs ----
         for name, gen in [("cycle", cycle),
-                          ("star", star),
+                          ("wheel", wheel),
                           ("grid", grid),
                           ("complete", complete)]:
             val = deterministic_value(N, gen)
             rows.append({
                 "N":          N,
-                "topology":   name,
+                "graph":   name,
                 "mean":       val,
                 "std":        0.0,
                 "n_samples":  1,
             })
             print(f"[N={N}]  {name:9s}  |lambda_2| = {val:.4f}", flush=True)
 
-        # ---- Random topology (WS) ----
+        # ---- Random graph (WS) ----
         ws_gen = lambda N_val, seed: watts_strogatz(N_val, C.WS_K, 0.1,
                                                     seed=seed)
 
@@ -89,7 +89,7 @@ def main() -> None:
             vals = random_values(N, gen, R, seed_base)
             rows.append({
                 "N":          N,
-                "topology":   name,
+                "graph":   name,
                 "mean":       float(vals.mean()),
                 "std":        float(vals.std(ddof=1)),
                 "n_samples":  R,
@@ -103,10 +103,10 @@ def main() -> None:
     print(f"\nSaved {out_path}")
 
     # Pretty print for direct copy into LaTeX Table 1
-    print("\n=== Table 1: |lambda_2(W)| by topology and N ===")
-    pivot = df.pivot(index="topology", columns="N", values="mean")
+    print("\n=== Table 1: |lambda_2(W)| by graph and N ===")
+    pivot = df.pivot(index="graph", columns="N", values="mean")
     # Preserve the row order used in the thesis (Table 1)
-    desired_order = ["cycle", "star", "grid", "complete", "WS(p=0.1)"]
+    desired_order = ["cycle", "wheel", "grid", "complete", "WS(p=0.1)"]
     pivot = pivot.reindex([t for t in desired_order if t in pivot.index])
     print(pivot.round(4))
 

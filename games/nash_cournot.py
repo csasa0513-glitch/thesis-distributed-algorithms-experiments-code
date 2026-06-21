@@ -1,13 +1,12 @@
 """
-Nash-Cournot aggregative game used in Chapter 6.
+Nash-Cournot game used in Chapter 6.
 
-Feasible set X_i (matches Koshal 2016, eq. (64), Sec. 6.1):
-    0 <= g_il <= cap_il,         l = 1, ..., L
-    s_il      >= 0,              l = 1, ..., L
-    sum_l g_il == sum_l s_il.    (equality coupling)
+The numerical experiments use the model
+    p_l(\bar s_l) = m_l - \bar s_l,
+    c_{i l}(g_{i l}) = a_{i l} g_{i l} + b_{i l} g_{i l}^2.
 
-Inverse demand:  p_l(u_l) = d_l - u_l              (Koshal 2016, slope = 1)
-Cost:            c_il(g)  = a_il * g + b_il * g^2   (no 1/2 coefficient)
+In the experiments, the feasible set is enforced with the equality
+    sum_l s_{i l} = sum_l g_{i l}.
 """
 from __future__ import annotations
 
@@ -18,16 +17,16 @@ import config as C
 
 
 def F_i(i: int, x_i: NDArray, u: NDArray) -> NDArray:
-    """Local gradient F_i(x_i, u) for player i."""
+    """Return the local mapping F_i(x_i, u) for player i."""
     g_i = x_i[: C.L]
     s_i = x_i[C.L :]
     dF_g = C.A_COEF[i] + 2.0 * C.B_COEF[i] * g_i
-    dF_s = u - C.D_INTERCEPT + s_i
+    dF_s = u - C.M_INTERCEPT + s_i
     return np.concatenate([dF_g, dF_s])
 
 
 def F_stack(x: NDArray, u: NDArray) -> NDArray:
-    """Stacked gradient F(x, u) = [F_1; ...; F_N], shape (N*2L,)."""
+    """Return the stacked mapping F(x, u) = [F_1; ...; F_N]."""
     out = np.empty(C.N * 2 * C.L)
     for i in range(C.N):
         out[i * 2 * C.L : (i + 1) * 2 * C.L] = F_i(i, x[i], u)
@@ -36,15 +35,17 @@ def F_stack(x: NDArray, u: NDArray) -> NDArray:
 
 def project_Xi(i: int, y: NDArray, tol: float = 1e-12) -> NDArray:
     """
-    Exact Euclidean projection  Pi_{X_i}(y)  of y in R^{2L} onto X_i.
+    Return the Euclidean projection of y onto X_i.
 
-    X_i (Koshal 2016, eq. (64)):
-        0 <= g_l <= cap_l,  s_l >= 0,  sum_l g_l == sum_l s_l.
+    In the numerical experiments, X_i is defined by
+        0 <= g_l <= cap_l,
+        s_l >= 0,
+        sum_l g_l = sum_l s_l.
 
-    Closed form via Lagrangian:
-        g_l(mu) = clip(y_g_l - mu, 0, cap_l)
-        s_l(mu) = max(y_s_l + mu, 0)
-    Choose scalar mu s.t. F(mu) = sum(g) - sum(s) = 0 (bisection).
+    The projection has the closed form
+        g_l(mu) = clip(y_g_l - mu, 0, cap_l),
+        s_l(mu) = max(y_s_l + mu, 0),
+    where mu is chosen so that sum(g) - sum(s) = 0.
     """
     y_g = y[: C.L]
     y_s = y[C.L :]
@@ -90,20 +91,20 @@ def project_full(y: NDArray) -> NDArray:
 
 
 def aggregate(x: NDArray) -> NDArray:
-    """True aggregate sales bar_s in R^L from a stacked x in R^{N*2L}."""
+    """Return the aggregate sales vector \bar s in R^L."""
     X = x.reshape(C.N, 2 * C.L)
     return X[:, C.L :].sum(axis=0)
 
 
 def solve_NE(max_iter: int = 50_000, tol: float = 1e-9) -> NDArray:
-    """Centralized projected-gradient NE solver. Used only for reference x*."""
+    """Solve the Nash equilibrium by centralized projected gradient descent."""
     L_lip = float(2.0 * np.max(C.B_COEF) + 2.0 * C.N)
-    tau = 1.0 / max(L_lip, 1.0)
+    alpha = 1.0 / max(L_lip, 1.0)
     x = np.zeros(C.N * 2 * C.L)
     for _ in range(max_iter):
         u = aggregate(x)
         g = F_stack(x.reshape(C.N, 2 * C.L), u)
-        x_new = project_full(x - tau * g)
+        x_new = project_full(x - alpha * g)
         if np.linalg.norm(x_new - x) < tol:
             x = x_new
             break
@@ -111,7 +112,3 @@ def solve_NE(max_iter: int = 50_000, tol: float = 1e-9) -> NDArray:
     return x
 
 
-if __name__ == "__main__":
-    x_star = solve_NE()
-    np.savez(C.RESULTS / "NE.npz", x_star=x_star)
-    print(f"NE computed, ||x*|| = {np.linalg.norm(x_star):.4f}")

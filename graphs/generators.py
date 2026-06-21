@@ -49,16 +49,16 @@ def koshal_weights(G: nx.Graph) -> NDArray:
 
 
 # --------------------------------------------------------------------------
-# Regular topologies  (baseline for RQ1)
+# Regular graphs  (baseline for RQ1)
 # --------------------------------------------------------------------------
 def cycle(N: int):
     G = nx.cycle_graph(N)
     return G, koshal_weights(G)
 
 
-def star(N: int):
+def wheel(N: int):
     """
-    Star graph with N total nodes: one central vertex connected to all
+    Wheel graph with N total nodes: one central vertex connected to all
     N-1 peripheral vertices. The peripheral vertices have NO edges among
     themselves. This is the graph called "wheel" in Koshal et al. (2016).
     """
@@ -87,7 +87,7 @@ def grid(N: int):
 
 
 # --------------------------------------------------------------------------
-# Complex topologies (main contribution: RQ2)
+# Complex graphs (main contribution: RQ2)
 # --------------------------------------------------------------------------
 def watts_strogatz(N: int, K: int, p: float, seed: int | None = None):
     """
@@ -112,14 +112,14 @@ def watts_strogatz(N: int, K: int, p: float, seed: int | None = None):
 # --------------------------------------------------------------------------
 # Registry used by the run_ scripts
 # --------------------------------------------------------------------------
-# Five-topology baseline (Chapter 6 of the thesis): four regular graphs
-# (cycle, star, grid, complete) reproducing Koshal et al. (2016) Figure 4,
+# Five-graph baseline (Chapter 6 of the thesis): four regular graphs
+# (cycle, wheel, grid, complete) reproducing Koshal et al. (2016) Figure 4,
 # plus one complex graph family (Watts-Strogatz) for the sensitivity sweep.
-# Note: Koshal calls "wheel" what is structurally a star graph
-# (one center + N-1 leaves, no peripheral edges).
+# Note: this "wheel" graph is structurally a star (one center + N-1
+# leaves, no peripheral edges); the naming follows the thesis / Koshal (2016).
 REGULAR = {
     "cycle":    cycle,
-    "star":     star,
+    "wheel":    wheel,
     "grid":     grid,
     "complete": complete,
 }

@@ -2,6 +2,7 @@
 results/*.csv
 results/*.png
 results/*.npz
+results/*.txt
 
 # --- Python cache and bytecode ---
 __pycache__/
@@ -28,6 +29,11 @@ Thumbs.db
 
 # --- Temporary / diagnostic scripts ---
 diagnose_*.py
+run_sync_sensitivity_v2.py
+
+# --- Convenience re-plot scripts (not uploaded; Figure 3 comes from run_*_p01.py) ---
+plot_sync_p01.py
+plot_async_p01.py
 
 # --- Jupyter ---
 .ipynb_checkpoints/

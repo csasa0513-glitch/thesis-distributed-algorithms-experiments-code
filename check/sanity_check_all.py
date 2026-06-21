@@ -81,16 +81,16 @@ def main():
         r.check("config.N default = 50", C.N == 50)
         r.check("config.L = 10", C.L == 10)
         r.check("config.STEP_DIM_NUM = 9.0", C.STEP_DIM_NUM == 9.0)
-        r.check("config.WS_P has 6 values", len(C.WS_P) == 6)
-        # Verify resample redraws D_INTERCEPT (the key bug we hunted)
-        d_initial = C.D_INTERCEPT.copy()
+        r.check("config.WS_P has 8 values", len(C.WS_P) == 8)
+        # Verify resample redraws M_INTERCEPT (the key bug we hunted)
+        d_initial = C.M_INTERCEPT.copy()
         C.resample(20)
-        d_20 = C.D_INTERCEPT.copy()
+        d_20 = C.M_INTERCEPT.copy()
         C.resample(50)
-        d_50 = C.D_INTERCEPT.copy()
-        r.check("resample(20) changes D_INTERCEPT", not np.allclose(d_initial, d_20))
+        d_50 = C.M_INTERCEPT.copy()
+        r.check("resample(20) changes M_INTERCEPT", not np.allclose(d_initial, d_20))
         r.check("resample(50) gives yet different D", not np.allclose(d_20, d_50))
-        r.check("D_INTERCEPT in [90, 100]",
+        r.check("M_INTERCEPT in [90, 100]",
                 np.all((d_50 >= 90) & (d_50 <= 100)))
         r.check("A_COEF shape (50, 10) after resample(50)", C.A_COEF.shape == (50, 10))
     except Exception as e:
@@ -127,12 +127,12 @@ def main():
     except Exception as e:
         r.check("nash_cournot.py", False, traceback.format_exc())
 
-    # A3. graphs/topologies.py
+    # A3. graphs/generators.py
     try:
         import networkx as nx
-        from graphs.topologies import cycle, star, grid, complete, watts_strogatz, REGULAR
-        r.check("topologies.py imports", True)
-        # Test each regular topology connected + W doubly stochastic
+        from graphs.generators import cycle, wheel, grid, complete, watts_strogatz, REGULAR
+        r.check("generators.py imports", True)
+        # Test each regular graph connected + W doubly stochastic
         for name, fn in REGULAR.items():
             G, W = fn(20)
             ok_conn = nx.is_connected(G)
@@ -146,7 +146,7 @@ def main():
             ok_conn = nx.is_connected(G)
             r.check(f"WS(50, 6, {p}) connected", ok_conn)
     except Exception as e:
-        r.check("topologies.py", False, traceback.format_exc())
+        r.check("generators.py", False, traceback.format_exc())
 
     # A4. algorithms/sync_koshal.py
     try:
@@ -201,26 +201,25 @@ def main():
 
     # B1. analysis/metrics.py
     try:
-        from analysis.metrics import (spectral_gap, lambda2_async, rho_async,
+        from analysis.metrics import (sync, async_,
                                        expected_gossip_matrix, summary)
         r.check("metrics.py imports", True)
         _, W_cycle = cycle(20)
-        gap = spectral_gap(W_cycle)
+        gap = 1.0 - sync(W_cycle)
         r.check("spectral_gap(W) in [0, 1]", 0 <= gap <= 1)
         G_cycle, _ = cycle(20)
         EW = expected_gossip_matrix(G_cycle)
         r.check("E[W(k)] is symmetric", np.allclose(EW, EW.T))
         r.check("E[W(k)] doubly stochastic",
                 np.allclose(EW.sum(axis=1), 1.0))
-        lam2 = lambda2_async(G_cycle)
-        rho = rho_async(G_cycle)
+        lam2 = async_(G_cycle) ** 2
+        rho = async_(G_cycle)
         r.check("lambda2_async in [0, 1]", 0 <= lam2 <= 1)
         r.check("rho_async = sqrt(lambda2_async)", abs(rho - np.sqrt(max(lam2, 0))) < 1e-10)
         summ = summary(G_cycle, W_cycle)
-        r.check("summary() returns 7 keys",
-                set(summ.keys()) == {'spectral_gap', 'clustering',
-                                       'avg_path_length', 'deg_hetero',
-                                       'diameter', 'mean_degree', 'num_edges'})
+        r.check("summary() returns 6 keys",
+                set(summ.keys()) == {'sync', 'async', 'CG', 'LG',
+                                       'mean_degree', 'num_edges'})
     except Exception as e:
         r.check("metrics.py", False, traceback.format_exc())
 
@@ -249,8 +248,8 @@ def main():
     # --------------------------------------------------------------------
     r.section("C class: Experiment scripts (8 files)")
 
-    for mod_name in ['run_sync_centralized', 'run_async_regular',
-                     'run_sync_regular', 'run_ws_graph_stats',
+    for mod_name in ['run_Table1', 'run_table4_table5',
+                     'run_table2_table3', 'run_Table7',
                      'run_sync_p01', 'run_async_p01',
                      'run_sync_sensitivity', 'run_async_sensitivity']:
         try:
